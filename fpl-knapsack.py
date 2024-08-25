@@ -4,7 +4,7 @@ from scipy.optimize import linprog
 
 # download the csv file
 url = 'https://raw.githubusercontent.com/vaastav/Fantasy-Premier-League/c43f0d83d2b9d769c8dadb64959c16b01713cfaa/data/2024-25/players_raw.csv'
-df = pd.read_csv(url, usecols=["first_name","second_name","points_per_game","total_points","element_type","now_cost"])
+df = pd.read_csv(url, usecols=["first_name","second_name","points_per_game","total_points","element_type","now_cost","team"])
 
 # Show the first 5 players on the list
 #print(df.head(5))
@@ -22,9 +22,15 @@ p_ones_zeros = np.zeros((4, n), dtype=int)          # sort into a matrix of ones
 p_ones_zeros[positions - 1, np.arange(n)] = 1       # row 0 -> gk, 1 -> def, 2 -> mid, 3 -> fwd
                                                     # each column represents a different player
 
+team = df['team'].to_numpy()                        # get the team of each player
+t_ones_zeros = np.zeros((20,n), dtype=int)          # sort into a matrix of ones and zeros
+t_ones_zeros[team - 1, np.arange(n)] = 1            # row 0 -> team 0, row 1 -> team 1
+                                                    # each column represents a player and the team they
+                                                    # play for. Each column should have a single 1.
+
 c = -v                                              # cost is negative of the value (total points last season)
-A_ub = p.reshape(1,n)                               # the price of each player, reshape to be a row vector
-b_ub = 1000                                         # bounded by 100 million
+A_ub = np.vstack([p, t_ones_zeros])                 # the price of each player, reshape to be a row vector
+b_ub = np.concatenate(([1000], np.repeat(3, 20)))   # bounded by 100 million
 A_eq = np.vstack([o, p_ones_zeros])                 # We need to pick 15 player, 2 gk, 5 def, 5 mid
 b_eq = np.array([15,2,5,5,3])                       # 3 fwds. We do this with b_eq
 
@@ -32,8 +38,10 @@ b_eq = np.array([15,2,5,5,3])                       # 3 fwds. We do this with b_
 sol = linprog(c, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq, bounds=(0, 1), integrality=1)
 
 
-player_ids = np.where(sol.x == 1)                   # save the players ids
-
+player_ids = np.where(sol.x > 0.5)                   # save the players ids
+if (len(player_ids[0])!=15):
+    print("Error with solution, exiting...")
+    exit()
 fnames = df['first_name']                           # get their names from the dataframe
 snames = df['second_name']
 
